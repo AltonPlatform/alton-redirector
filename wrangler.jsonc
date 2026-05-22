@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "alton-referral-redirector",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "APP_STORE_URL": "https://apps.apple.com/app/alton-trader/id0000000000",
+    "GOOGLE_PLAY_URL": "https://play.google.com/store/apps/details?id=com.alton.trader",
+    "API_URL": "https://api.altontrader.com"
+  }
+}
