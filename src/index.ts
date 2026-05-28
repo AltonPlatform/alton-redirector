@@ -5,6 +5,7 @@ export interface Env {
   APP_STORE_URL: string;
   GOOGLE_PLAY_URL: string;
   API_URL: string;
+  HOME_URL: string;
 }
 
 const REF_CODE_PATTERN = /^[A-Za-z0-9]{3,20}$/;
@@ -34,6 +35,10 @@ export default {
 
     if (request.method !== "GET") {
       return new Response("Method Not Allowed", { status: 405 });
+    }
+
+    if (url.pathname === "/") {
+      return Response.redirect(env.HOME_URL, 302);
     }
 
     const refCode = extractRefCode(url.pathname);
