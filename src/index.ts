@@ -29,11 +29,39 @@ function badRequest(): Response {
   return new Response("Invalid referral code", { status: 400 });
 }
 
+function getClientIp(request: Request): string | null {
+  const cfIp = request.headers.get("CF-Connecting-IP");
+  if (cfIp) return cfIp.trim();
+
+  const forwarded = request.headers.get("X-Forwarded-For");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+
+  return null;
+}
+
 async function proxyReferralClick(
   request: Request,
   env: Env
 ): Promise<Response> {
-  const body = await request.text();
+  const rawBody = await request.text();
+  const clientIp = getClientIp(request);
+
+  let body: string;
+  try {
+    const payload = JSON.parse(rawBody) as Record<string, unknown>;
+    if (clientIp) {
+      payload.client_ip = clientIp;
+    }
+    body = JSON.stringify(payload);
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid json" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const response = await fetch(`${env.API_URL}/referral/click`, {
