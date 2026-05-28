@@ -8,7 +8,7 @@ export interface PageParams {
   refCode: string;
   appStoreUrl: string;
   googlePlayUrl: string;
-  apiUrl: string;
+  homeUrl: string;
   locale: Locale;
 }
 
@@ -36,12 +36,11 @@ export function renderPage(params: PageParams): string {
   const refCode = escapeHtml(params.refCode);
   const appStoreUrl = escapeHtml(params.appStoreUrl);
   const googlePlayUrl = escapeHtml(params.googlePlayUrl);
-  const apiUrl = escapeHtml(params.apiUrl);
+  const faviconUrl = escapeHtml(`${params.homeUrl.replace(/\/$/, "")}/favicon.ico`);
 
   const refCodeJs = escapeJsString(params.refCode);
   const appStoreUrlJs = escapeJsString(params.appStoreUrl);
   const googlePlayUrlJs = escapeJsString(params.googlePlayUrl);
-  const apiUrlJs = escapeJsString(params.apiUrl);
   const i18nJson = escapeJsString(translationsJson());
   const serverLocaleJs = escapeJsString(params.locale);
 
@@ -63,6 +62,7 @@ export function renderPage(params: PageParams): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="${faviconUrl}">
   <title>Alton Trader</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -290,7 +290,7 @@ export function renderPage(params: PageParams): string {
     var REF_CODE = '${refCodeJs}';
     var APP_STORE_URL = '${appStoreUrlJs}';
     var GOOGLE_PLAY_URL = '${googlePlayUrlJs}';
-    var API_URL = '${apiUrlJs}';
+    var CLICK_URL = '/referral/click';
     var REDIRECT_DELAY = 300;
 
     function sha256(text) {
@@ -379,17 +379,17 @@ export function renderPage(params: PageParams): string {
         timestamp: Date.now()
       });
 
-      var url = API_URL + '/referral/click';
       var blob = new Blob([payload], { type: 'application/json' });
 
-      if (navigator.sendBeacon && navigator.sendBeacon(url, blob)) {
+      if (navigator.sendBeacon && navigator.sendBeacon(CLICK_URL, blob)) {
         return;
       }
 
-      fetch(url, {
+      fetch(CLICK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,
+        credentials: 'same-origin',
         keepalive: true
       }).catch(function () {});
     }

@@ -29,9 +29,45 @@ function badRequest(): Response {
   return new Response("Invalid referral code", { status: 400 });
 }
 
+async function proxyReferralClick(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await request.text();
+
+  try {
+    const response = await fetch(`${env.API_URL}/referral/click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+
+    return new Response(await response.text(), {
+      status: response.status,
+      headers: {
+        "Content-Type":
+          response.headers.get("Content-Type") ?? "application/json",
+      },
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: "upstream failed" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/favicon.ico" && request.method === "GET") {
+      return Response.redirect(`${env.HOME_URL}/favicon.ico`, 302);
+    }
+
+    if (url.pathname === "/referral/click" && request.method === "POST") {
+      return proxyReferralClick(request, env);
+    }
 
     if (request.method !== "GET") {
       return new Response("Method Not Allowed", { status: 405 });
@@ -56,7 +92,7 @@ export default {
       refCode,
       appStoreUrl: env.APP_STORE_URL,
       googlePlayUrl: env.GOOGLE_PLAY_URL,
-      apiUrl: env.API_URL,
+      homeUrl: env.HOME_URL,
       locale,
     });
 
