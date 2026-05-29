@@ -293,83 +293,112 @@ export function renderPage(params: PageParams): string {
     var CLICK_URL = '/referral/click';
     var REDIRECT_DELAY = 300;
 
-    function sha256(text) {
-      var encoder = new TextEncoder();
-      return crypto.subtle.digest('SHA-256', encoder.encode(text)).then(function (buf) {
-        return Array.from(new Uint8Array(buf))
-          .map(function (b) { return b.toString(16).padStart(2, '0'); })
-          .join('');
-      });
+    function parseOsVersion(ua) {
+      var ios = ua.match(/OS (\\d+)[_.](\\d+)(?:[_.](\\d+))?/);
+      if (ios) {
+        var parts = [ios[1], ios[2]];
+        if (ios[3]) parts.push(ios[3]);
+        return parts.join('.');
+      }
+      var android = ua.match(/Android (\\d+(?:\\.\\d+)?)/);
+      if (android) return android[1];
+      var mac = ua.match(/Mac OS X (\\d+)[_.](\\d+)(?:[_.](\\d+))?/);
+      if (mac) {
+        var macParts = [mac[1], mac[2]];
+        if (mac[3]) macParts.push(mac[3]);
+        return macParts.join('.');
+      }
+      var win = ua.match(/Windows NT (\\d+\\.\\d+)/);
+      if (win) return win[1];
+      return 'unknown';
     }
 
-    function getCanvasFingerprint() {
-      try {
-        var canvas = document.createElement('canvas');
-        canvas.width = 200;
-        canvas.height = 50;
-        var ctx = canvas.getContext('2d');
-        if (!ctx) return Promise.resolve(null);
-
-        ctx.textBaseline = 'top';
-        ctx.font = '14px Arial';
-        ctx.fillStyle = '#f60';
-        ctx.fillRect(0, 0, 100, 50);
-        ctx.fillStyle = '#069';
-        ctx.fillText('Alton Trader', 2, 15);
-        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-        ctx.fillText('Alton Trader', 4, 17);
-        ctx.beginPath();
-        ctx.arc(50, 25, 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        return sha256(canvas.toDataURL());
-      } catch (e) {
-        return Promise.resolve(null);
+    function parseBrand(ua) {
+      if (/iPhone|iPad|iPod/.test(ua)) return 'Apple';
+      if (/Android/.test(ua)) {
+        if (/Samsung|SM-|SAMSUNG/i.test(ua)) return 'Samsung';
+        if (/Pixel/i.test(ua)) return 'Google';
+        if (/Huawei|HUAWEI/i.test(ua)) return 'Huawei';
+        if (/Xiaomi|Redmi|MI /i.test(ua)) return 'Xiaomi';
+        if (/OPPO/i.test(ua)) return 'OPPO';
+        if (/vivo/i.test(ua)) return 'vivo';
+        if (/OnePlus/i.test(ua)) return 'OnePlus';
+        return 'Android';
       }
+      if (/Windows/.test(ua)) return 'Microsoft';
+      if (/Mac OS X/.test(ua)) return 'Apple';
+      if (/Linux/.test(ua)) return 'Linux';
+      return 'Unknown';
     }
 
-    function getWebGLFingerprint() {
-      try {
-        var canvas = document.createElement('canvas');
-        var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (!gl) return Promise.resolve(null);
+    function guessIphoneModel() {
+      var min = Math.min(screen.width, screen.height);
+      var max = Math.max(screen.width, screen.height);
+      var key = min + 'x' + max;
+      var models = {
+        '320x568': 'iPhone SE',
+        '375x667': 'iPhone 8',
+        '414x736': 'iPhone 8 Plus',
+        '375x812': 'iPhone X',
+        '414x896': 'iPhone 11',
+        '390x844': 'iPhone 12',
+        '428x926': 'iPhone 12 Pro Max',
+        '393x852': 'iPhone 14',
+        '430x932': 'iPhone 14 Pro Max'
+      };
+      return models[key] || 'iPhone';
+    }
 
-        var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (!debugInfo) return Promise.resolve(null);
-
-        var renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-        var vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-        var raw = vendor + '~' + renderer;
-
-        return sha256(raw);
-      } catch (e) {
-        return Promise.resolve(null);
+    function parseDeviceModel(ua) {
+      if (/iPad/.test(ua)) return 'iPad';
+      if (/iPhone/.test(ua)) return guessIphoneModel();
+      if (/Android/.test(ua)) {
+        var build = ua.match(/;\\s*([^;)]+)\\s+Build\\//);
+        if (build) return build[1].trim();
+        var paren = ua.match(/Android[^;]*;\\s*([^)]+)\\)/);
+        if (paren) return paren[1].trim().split(' Build')[0];
       }
+      if (/Macintosh/.test(ua)) return 'Mac';
+      if (/Windows/.test(ua)) return 'PC';
+      return navigator.platform || 'Unknown';
+    }
+
+    function getTotalMemory() {
+      var gb = navigator.deviceMemory;
+      if (typeof gb === 'number' && gb > 0) {
+        return Math.round(gb * 1024 * 1024 * 1024);
+      }
+      return null;
+    }
+
+    function getFontScale() {
+      try {
+        var rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        if (rootSize > 0) return Math.round((rootSize / 16) * 100) / 100;
+      } catch (e) {}
+      return 1;
     }
 
     function collectFingerprint() {
-      return Promise.all([getCanvasFingerprint(), getWebGLFingerprint()]).then(function (results) {
-        return {
-          canvas: results[0],
-          webgl: results[1],
-          screen: {
-            width: screen.width,
-            height: screen.height,
-            colorDepth: screen.colorDepth,
-            pixelRatio: window.devicePixelRatio || 1
-          },
-          navigator: {
-            userAgent: navigator.userAgent,
-            language: navigator.language,
-            hardwareConcurrency: navigator.hardwareConcurrency || null,
-            deviceMemory: navigator.deviceMemory || null,
-            platform: navigator.platform,
-            maxTouchPoints: navigator.maxTouchPoints || 0,
-            doNotTrack: navigator.doNotTrack || null
-          },
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        };
-      });
+      var ua = navigator.userAgent;
+      var fingerprint = {
+        user_agent: ua,
+        device_model: parseDeviceModel(ua),
+        os_version: parseOsVersion(ua),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language: (navigator.language || 'en').split('-')[0],
+        screen_width: screen.width,
+        screen_height: screen.height,
+        font_scale: getFontScale(),
+        brand: parseBrand(ua)
+      };
+
+      var totalMemory = getTotalMemory();
+      if (totalMemory !== null) {
+        fingerprint.total_memory = totalMemory;
+      }
+
+      return fingerprint;
     }
 
     function sendClick(fingerprint) {
@@ -412,8 +441,8 @@ export function renderPage(params: PageParams): string {
       window.location.href = url;
     }
 
-    collectFingerprint().then(function (fingerprint) {
-      sendClick(fingerprint);
+    function runRedirectFlow() {
+      sendClick(collectFingerprint());
 
       var platform = detectPlatform();
 
@@ -426,19 +455,9 @@ export function renderPage(params: PageParams): string {
           showDesktopUI();
         }
       }, REDIRECT_DELAY);
-    }).catch(function () {
-      var platform = detectPlatform();
+    }
 
-      setTimeout(function () {
-        if (platform === 'ios') {
-          redirect(APP_STORE_URL);
-        } else if (platform === 'android') {
-          redirect(GOOGLE_PLAY_URL);
-        } else {
-          showDesktopUI();
-        }
-      }, REDIRECT_DELAY);
-    });
+    runRedirectFlow();
   })();
   </script>
 </body>
